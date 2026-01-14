@@ -1,7 +1,6 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
-using System.Linq;
 using UnityEngine;
 
 public class ResourcesScanner : MonoBehaviour
@@ -11,6 +10,7 @@ public class ResourcesScanner : MonoBehaviour
     [Header("For debug")]
     [SerializeField] private bool _isDrawScanRadius;
 
+    Collider[] _hits = new Collider[64];
     private Coroutine _coroutine;
 
     public event Action<List<Resource>> Detected;
@@ -48,10 +48,12 @@ public class ResourcesScanner : MonoBehaviour
             yield return wait;
 
             List<Resource> foundResources = new List<Resource>();
-            List<Collider> hits = Physics.OverlapSphere(transform.position, _scanRadius).ToList();
+            int hitsCount = Physics.OverlapSphereNonAlloc(transform.position, _scanRadius, _hits);
 
-            foreach (var hit in hits)
+            for (int i = 0; i < hitsCount; i++)
             {
+                Collider hit = _hits[i];
+
                 if (hit.TryGetComponent(out Resource resource))
                 {
                     foundResources.Add(resource);

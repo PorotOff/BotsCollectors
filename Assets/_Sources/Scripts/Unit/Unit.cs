@@ -38,7 +38,7 @@ public class Unit : MonoBehaviour
 
     private void OnEnable()
     {
-        _resourceDetector.Detected += OnResourceDetected;
+        _resourceDetector.Detected += OnTargetResourcePickedUp;
 
         _baseComponentTriggerDetector.Detected += OnBaseDetected;
         _baseComponentTriggerDetector.Lost += OnBaseLost;
@@ -46,7 +46,7 @@ public class Unit : MonoBehaviour
 
     private void OnDisable()
     {
-        _resourceDetector.Detected -= OnResourceDetected;
+        _resourceDetector.Detected -= OnTargetResourcePickedUp;
 
         _baseComponentTriggerDetector.Detected -= OnBaseDetected;
         _baseComponentTriggerDetector.Lost -= OnBaseLost;
@@ -61,44 +61,33 @@ public class Unit : MonoBehaviour
     {
         _targetResource = resource;
 
-        _targetResource.PickedUp += OnTargetResourcePickedUp;
-
         _navMeshAgent.isStopped = false;
         _navMeshAgent.SetDestination(_targetResource.transform.position);
 
         _unitAnimator.SetRun();
     }
 
-    private void OnResourceDetected(Resource resource)
+    private void OnTargetResourcePickedUp(Resource resource)
     {
         if (resource != _targetResource)
         {
             return;
         }
 
-        _resource = resource;
-        _resource.Pickup();
-
-        _resource.transform.SetParent(_carryingPoint);
-        _resource.transform.localPosition = Vector3.zero;
-
-        _unitAnimator.SetCarry();
-    }
-
-    private void OnTargetResourcePickedUp()
-    {
-        _targetResource.PickedUp -= OnTargetResourcePickedUp;
-        _targetResource.GetComponent<Collider>().enabled = false;
-        _targetResource = null;
-
-        if (_base != null)
-        {
-            _navMeshAgent.SetDestination(_base.transform.position);
-        }
-        else
+        if (_base == null)
         {
             Debug.LogError($"Юнит {name} безбазный. Ему некуда идти");
+            return;
         }
+
+        _targetResource = null;
+
+        _resource = resource;
+        _resource.Pickup(_carryingPoint);
+
+        _navMeshAgent.SetDestination(_base.transform.position);
+
+        _unitAnimator.SetCarry();
     }
 
     private void OnBaseDetected(Base @base)
@@ -124,7 +113,4 @@ public class Unit : MonoBehaviour
     {
         _isAtBase = false;
     }
-
-    // todo Реализовать нормальное выключение коллизии у ресурса
-    // todo Исправить вывод предупреждения об отсутствии юнитов (чтобы один раз было за все ресурсы, а не за каждый ресурс по выводу)
 }

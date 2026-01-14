@@ -21,12 +21,15 @@ public class Resource : MonoBehaviour, IPooledObject<Resource>
         Released?.Invoke(this);
     }
 
-    public void Pickup()
+    public void Pickup(Transform parent)
     {
         if (_collider != null)
         {
             _collider.enabled = false;
         }
+
+        transform.SetParent(parent);
+        transform.localPosition = Vector3.zero;
 
         PickedUp?.Invoke();
     }

@@ -6,12 +6,12 @@ using UnityEngine;
 [RequireComponent(typeof(BaseStatisticDisplayer))]
 public class Base : MonoBehaviour
 {
+    [SerializeField] private ResourcesRegistry _resourceRegistry;
     [SerializeField] private List<Unit> _units = new List<Unit>();
 
     private ResourcesScanner _resourceScanner;
     private BaseStatisticDisplayer _baseStatisticDisplayer;
 
-    private List<Resource> _reservedResources = new List<Resource>();
     private int _resourcesCount;
 
     private void Awake()
@@ -39,7 +39,7 @@ public class Base : MonoBehaviour
 
     public void TakeResource(Resource resource)
     {
-        _reservedResources.Remove(resource);
+        _resourceRegistry.RemoveReservation(resource);
         resource.Collect();
         _resourcesCount++;
 
@@ -54,7 +54,7 @@ public class Base : MonoBehaviour
 
     private List<Resource> GetAvaliableResources(List<Resource> resources)
     {
-        return resources.Where(resource => _reservedResources.Contains(resource) == false).ToList();
+        return resources.Where(resource => _resourceRegistry.IsResourceReserved(resource) == false).ToList();
     }
 
     private void SendUnitsForResources(List<Resource> resources)
@@ -63,10 +63,8 @@ public class Base : MonoBehaviour
         {
             if (TryGetRandomFreeUnit(out Unit unit))
             {
-                Debug.Log($"Юнит {unit.name} отправлен за ресурсом");
-
                 unit.GoToResource(resource);
-                _reservedResources.Add(resource);
+                _resourceRegistry.Reserve(resource);
             }
             else
             {

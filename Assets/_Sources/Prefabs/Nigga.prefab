@@ -631,10 +631,10 @@ GameObject:
   - component: {fileID: 2378448486325252955}
   - component: {fileID: 6000017669083706804}
   - component: {fileID: -1454043887158051085}
-  - component: {fileID: 7701364970169216333}
-  - component: {fileID: 6249836958140139880}
-  - component: {fileID: 6735041074011474442}
-  - component: {fileID: 4981013319054527164}
+  - component: {fileID: -501501186263059137}
+  - component: {fileID: 2273779800667544591}
+  - component: {fileID: -7674084790626278632}
+  - component: {fileID: -2140449770289083504}
   m_Layer: 0
   m_Name: Nigga
   m_TagString: Untagged
@@ -752,7 +752,7 @@ NavMeshAgent:
   m_BaseOffset: 0
   m_WalkableMask: 4294967295
   m_ObstacleAvoidanceType: 4
---- !u!114 &7701364970169216333
+--- !u!114 &-501501186263059137
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -764,7 +764,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ed93debc0cbc57a4cb9d0d449d3a7085, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
---- !u!114 &6249836958140139880
+--- !u!114 &2273779800667544591
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -776,7 +776,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 79860ba5bf16e224e9d3636e6a02b8ae, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
---- !u!114 &6735041074011474442
+--- !u!114 &-7674084790626278632
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -788,7 +788,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 79374031478326a4287d84ce2bdd90eb, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
---- !u!114 &4981013319054527164
+--- !u!114 &-2140449770289083504
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -800,10 +800,11 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 7bc84c488537f704f9ad6ecbdf88ef87, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  _speed: 2.5
-  _acceleration: 30
-  _angularSpeed: 5000
+  _speed: 3
+  _acceleration: 10
+  _angularSpeed: 500
   _carryingPoint: {fileID: 4266868153526622265}
+  _isAtBase: 0
 --- !u!1 &4533996187387077184
 GameObject:
   m_ObjectHideFlags: 0
