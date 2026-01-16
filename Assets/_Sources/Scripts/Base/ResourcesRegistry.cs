@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using UnityEngine;
 
 public class ResourcesRegistry : MonoBehaviour
@@ -18,5 +19,10 @@ public class ResourcesRegistry : MonoBehaviour
     public bool IsResourceReserved(Resource resource)
     {
         return _reservedResources.Contains(resource);
+    }
+
+    public List<Resource> GetAvaliableResources(List<Resource> resources)
+    {
+        return resources.Where(resource => IsResourceReserved(resource) == false).ToList();
     }
 }

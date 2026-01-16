@@ -1,70 +1,102 @@
+using System;
 using System.Collections.Generic;
-using System.Linq;
 using UnityEngine;
 
 [RequireComponent(typeof(ResourcesScanner))]
-[RequireComponent(typeof(BaseStatisticDisplayer))]
+[RequireComponent(typeof(UnitsSpawner))]
 public class Base : MonoBehaviour
 {
-    [SerializeField] private ResourcesRegistry _resourceRegistry;
-    [SerializeField] private List<Unit> _units = new List<Unit>();
+    [Header("Base settings")]
+    [SerializeField, Min(0)] private int _initialUnitsCount = 3;
+    [Header("Expansion settings")]
+    [SerializeField, Min(0)] private int _newUnitCostResources = 3;
+    [SerializeField, Min(0)] private int _newBaseCostResources = 5;
 
     private ResourcesScanner _resourceScanner;
-    private BaseStatisticDisplayer _baseStatisticDisplayer;
+    private UnitsSpawner _unitCreator;
 
-    private int _resourcesCount;
+    private UnitsRegistry _unitsRegistry;
+    private ResourcesAccounter _resourcesAccounter;
+
+    private ResourcesRegistry _resourcesRegistry;
+
+    public event Action ChangedResourcesCount;
 
     private void Awake()
     {
         _resourceScanner = GetComponent<ResourcesScanner>();
-        _baseStatisticDisplayer = GetComponent<BaseStatisticDisplayer>();
+        _unitCreator = GetComponent<UnitsSpawner>();
 
-        _units.ForEach(unit => unit.Initialize(this));
+        _unitsRegistry = new UnitsRegistry();
+        _resourcesAccounter = new ResourcesAccounter();
+
+        _resourcesRegistry = FindFirstObjectByType<ResourcesRegistry>(FindObjectsInactive.Include);
+
+        if (_resourcesRegistry == null)
+        {
+            Debug.LogError($"На сцене нет {nameof(_resourcesRegistry)}");
+        }
     }
 
     private void Start()
     {
-        _baseStatisticDisplayer.Display(_resourcesCount);
+        List<Unit> initialUnits = _unitCreator.Spawn(this, _initialUnitsCount);
+        _unitsRegistry.Add(initialUnits);
     }
 
     private void OnEnable()
     {
         _resourceScanner.Detected += OnDetectedResource;
+
+        _resourcesAccounter.ChangedCount += OnChangedResourcesCount;
+        _resourcesAccounter.ChangedCount += OnCollectedEnoughtResourcesForCreateUnit;
     }
 
     private void OnDisable()
     {
         _resourceScanner.Detected -= OnDetectedResource;
+
+        _resourcesAccounter.ChangedCount -= OnChangedResourcesCount;
+        _resourcesAccounter.ChangedCount -= OnCollectedEnoughtResourcesForCreateUnit;
     }
 
     public void TakeResource(Resource resource)
     {
-        _resourceRegistry.RemoveReservation(resource);
+        _resourcesRegistry.RemoveReservation(resource);
         resource.Collect();
-        _resourcesCount++;
-
-        _baseStatisticDisplayer.Display(_resourcesCount);
+        _resourcesAccounter.Add(1);
     }
 
     private void OnDetectedResource(List<Resource> resources)
     {
-        List<Resource> avaliableResources = GetAvaliableResources(resources);
+        List<Resource> avaliableResources = _resourcesRegistry.GetAvaliableResources(resources);
         SendUnitsForResources(avaliableResources);
     }
 
-    private List<Resource> GetAvaliableResources(List<Resource> resources)
+    private void OnChangedResourcesCount()
     {
-        return resources.Where(resource => _resourceRegistry.IsResourceReserved(resource) == false).ToList();
+        ChangedResourcesCount?.Invoke();
+    }
+
+    private void OnCollectedEnoughtResourcesForCreateUnit()
+    {
+        if (_resourcesAccounter.HasEnoughResources(_newUnitCostResources))
+        {
+            Unit newUnit = _unitCreator.Spawn(this);
+            _unitsRegistry.Add(newUnit);
+
+            _resourcesAccounter.Remove(_newBaseCostResources);
+        }
     }
 
     private void SendUnitsForResources(List<Resource> resources)
     {
         foreach (var resource in resources)
         {
-            if (TryGetRandomFreeUnit(out Unit unit))
+            if (_unitsRegistry.TryGetRandomFreeUnit(out Unit unit))
             {
                 unit.GoToResource(resource);
-                _resourceRegistry.Reserve(resource);
+                _resourcesRegistry.Reserve(resource);
             }
             else
             {
@@ -72,20 +104,5 @@ public class Base : MonoBehaviour
                 break;
             }
         }
-    }
-
-    private bool TryGetRandomFreeUnit(out Unit unit)
-    {
-        List<Unit> freeUnits = _units.Where(unit => unit.IsFree).ToList();
-
-        if (freeUnits.Count == 0)
-        {
-            unit = null;
-            return false;
-        }
-
-        unit = freeUnits[Random.Range(0, freeUnits.Count)];
-
-        return true;
     }
 }

@@ -1,3 +1,4 @@
+using System;
 using UnityEngine;
 using UnityEngine.AI;
 
@@ -5,7 +6,7 @@ using UnityEngine.AI;
 [RequireComponent(typeof(UnitAnimator))]
 [RequireComponent(typeof(ResourceComponentTriggerDetector))]
 [RequireComponent(typeof(BaseComponentTriggerDetector))]
-public class Unit : MonoBehaviour
+public class Unit : MonoBehaviour, IPooledObject<Unit>
 {
     [SerializeField] private float _speed = 3f;
     [SerializeField] private float _acceleration = 10f;
@@ -20,7 +21,9 @@ public class Unit : MonoBehaviour
     private Base _base;
     private Resource _targetResource;
     private Resource _resource;
-    [SerializeField] private bool _isAtBase;
+    private bool _isAtBase;
+
+    public event Action<Unit> Released;
 
     public bool IsFree => _targetResource == null && _resource == null;
 
@@ -34,6 +37,7 @@ public class Unit : MonoBehaviour
         _navMeshAgent.speed = _speed;
         _navMeshAgent.acceleration = _acceleration;
         _navMeshAgent.angularSpeed = _angularSpeed;
+        _navMeshAgent.enabled = false;
     }
 
     private void OnEnable()
@@ -52,9 +56,16 @@ public class Unit : MonoBehaviour
         _baseComponentTriggerDetector.Lost -= OnBaseLost;
     }
 
-    public void Initialize(Base @base)
+    public void Initialize(Base @base, Vector3 positionOnNavMesh)
     {
         _base = @base;
+        _navMeshAgent.Warp(positionOnNavMesh);
+        _navMeshAgent.enabled = true;
+    }
+
+    public void Release()
+    {
+        Released?.Invoke(this);
     }
 
     public void GoToResource(Resource resource)
