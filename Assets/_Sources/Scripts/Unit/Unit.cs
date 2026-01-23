@@ -4,8 +4,9 @@ using UnityEngine.AI;
 
 [RequireComponent(typeof(NavMeshAgent))]
 [RequireComponent(typeof(UnitAnimator))]
-[RequireComponent(typeof(ResourceComponentTriggerDetector))]
-[RequireComponent(typeof(BaseComponentTriggerDetector))]
+[RequireComponent(typeof(ResourceTargetTriggerDetector))]
+[RequireComponent(typeof(BaseTargetTriggerDetector))]
+[RequireComponent(typeof(FlagTargetTriggerDetector))]
 public class Unit : MonoBehaviour, IPooledObject<Unit>
 {
     [SerializeField] private float _speed = 3f;
@@ -14,53 +15,55 @@ public class Unit : MonoBehaviour, IPooledObject<Unit>
     [SerializeField] private Transform _carryingPoint;
 
     private NavMeshAgent _navMeshAgent;
-    private UnitAnimator _unitAnimator;
-    private ResourceComponentTriggerDetector _resourceDetector;
-    private BaseComponentTriggerDetector _baseComponentTriggerDetector;
+    private UnitAnimator _animator;
+    private ResourceTargetTriggerDetector _resourceDetector;
+    private BaseTargetTriggerDetector _baseDetector;
+    private FlagTargetTriggerDetector _flagDetector;
 
     private Base _base;
-    private Resource _targetResource;
     private Resource _resource;
-    private bool _isAtBase;
+    private IUnitState _unitState;
+    private bool _isAtBase = true;
 
     public event Action<Unit> Released;
+    public event Action<Unit> PickedUpFlag;
 
-    public bool IsFree => _targetResource == null && _resource == null;
+    public bool IsFree => _isAtBase;
+    public bool IsBusyGoingFlag => _unitState is MoveToFlagUnitState;
 
     private void Awake()
     {
         _navMeshAgent = GetComponent<NavMeshAgent>();
-        _unitAnimator = GetComponent<UnitAnimator>();
-        _resourceDetector = GetComponent<ResourceComponentTriggerDetector>();
-        _baseComponentTriggerDetector = GetComponent<BaseComponentTriggerDetector>();
+        _animator = GetComponent<UnitAnimator>();
+        _resourceDetector = GetComponent<ResourceTargetTriggerDetector>();
+        _baseDetector = GetComponent<BaseTargetTriggerDetector>();
+        _flagDetector = GetComponent<FlagTargetTriggerDetector>();
 
         _navMeshAgent.speed = _speed;
         _navMeshAgent.acceleration = _acceleration;
         _navMeshAgent.angularSpeed = _angularSpeed;
-        _navMeshAgent.enabled = false;
     }
 
     private void OnEnable()
     {
-        _resourceDetector.Detected += OnTargetResourcePickedUp;
-
-        _baseComponentTriggerDetector.Detected += OnBaseDetected;
-        _baseComponentTriggerDetector.Lost += OnBaseLost;
+        _resourceDetector.Detected += OnTargetResourceDetected;
+        _baseDetector.Detected += OnBaseDetected;
+        _baseDetector.Lost += OnBaseLost;
+        _flagDetector.Detected += OnFlagDetected;
     }
 
     private void OnDisable()
     {
-        _resourceDetector.Detected -= OnTargetResourcePickedUp;
-
-        _baseComponentTriggerDetector.Detected -= OnBaseDetected;
-        _baseComponentTriggerDetector.Lost -= OnBaseLost;
+        _resourceDetector.Detected -= OnTargetResourceDetected;
+        _baseDetector.Detected -= OnBaseDetected;
+        _baseDetector.Lost -= OnBaseLost;
+        _flagDetector.Detected -= OnFlagDetected;
     }
 
-    public void Initialize(Base @base, Vector3 positionOnNavMesh)
+    public void Initialize(Base @base)
     {
         _base = @base;
-        _navMeshAgent.Warp(positionOnNavMesh);
-        _navMeshAgent.enabled = true;
+        _baseDetector.Initialize(_base);
     }
 
     public void Release()
@@ -70,54 +73,91 @@ public class Unit : MonoBehaviour, IPooledObject<Unit>
 
     public void GoToResource(Resource resource)
     {
-        _targetResource = resource;
+        _resourceDetector.Initialize(resource);
 
-        _navMeshAgent.isStopped = false;
-        _navMeshAgent.SetDestination(_targetResource.transform.position);
-
-        _unitAnimator.SetRun();
+        MoveToResourceUnitState moveState = new MoveToResourceUnitState(resource, _navMeshAgent, _animator);
+        moveState.TargetLost += OnTargetResourceLost;
+        SetState(moveState);
     }
 
-    private void OnTargetResourcePickedUp(Resource resource)
+    public void GoToFlag(Flag flag)
     {
-        if (resource != _targetResource)
+        _flagDetector.Initialize(flag);
+
+        MoveToFlagUnitState moveState = new MoveToFlagUnitState(flag, _navMeshAgent, _animator);
+        moveState.TargetLost += OnFlagLost;
+        SetState(moveState);
+    }
+
+    private void SetState(IUnitState unitState)
+    {
+        if (_unitState != null)
         {
-            return;
+            _unitState.Exit();
         }
 
+        _unitState = unitState;
+        _unitState.Enter();
+    }
+
+    private void OnTargetResourceDetected(Resource resource)
+    {
         if (_base == null)
         {
             Debug.LogError($"Юнит {name} безбазный. Ему некуда идти");
             return;
         }
 
-        _targetResource = null;
-
         _resource = resource;
-        _resource.Pickup(_carryingPoint);
+        _resource.PickUp(_carryingPoint);
 
-        _navMeshAgent.SetDestination(_base.transform.position);
+        SetState(new CarryResourceToBaseUnitState(_base, _navMeshAgent, _animator));
+    }
 
-        _unitAnimator.SetCarry();
+    private void OnTargetResourceLost(MoveToUnitState<Resource> moveToResourceUnitState)
+    {
+        moveToResourceUnitState.TargetLost -= OnTargetResourceLost;
+
+        if (_isAtBase)
+            return;
+        
+        SetState(new MoveToBaseUnitState(_base, _navMeshAgent, _animator));
+    }
+
+    private void OnFlagDetected(Flag flag)
+    {
+        if (IsBusyGoingFlag == false)
+            return;
+
+        flag.PickUp();
+        _flagDetector.Deinitialize();
+
+        PickedUpFlag?.Invoke(this);
+    }
+
+    private void OnFlagLost(MoveToUnitState<Flag> moveToFlagUnitState)
+    {
+        moveToFlagUnitState.TargetLost -= OnFlagLost;
+        
+        if (_isAtBase)
+            return;
+
+        SetState(new MoveToBaseUnitState(_base, _navMeshAgent, _animator));
     }
 
     private void OnBaseDetected(Base @base)
     {
         if (_isAtBase)
-        {
             return;
-        }
-
-        if (_resource != null)
-        {
-            @base.TakeResource(_resource);
-            _resource = null;
-        }
 
         _isAtBase = true;
-        _navMeshAgent.isStopped = true;
+        SetState(new IdleUnitState(_navMeshAgent, _animator));
 
-        _unitAnimator.SetIdle();
+        if (_resource == null)
+            return;
+
+        @base.TakeResource(_resource);
+        _resource = null;
     }
 
     private void OnBaseLost()

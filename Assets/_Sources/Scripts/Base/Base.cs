@@ -4,89 +4,99 @@ using UnityEngine;
 
 [RequireComponent(typeof(ResourcesScanner))]
 [RequireComponent(typeof(UnitsSpawner))]
-public class Base : MonoBehaviour
+[RequireComponent(typeof(UnitsRegistry))]
+[RequireComponent(typeof(UnitSendingTimer))]
+[RequireComponent(typeof(BaseResourcesStatisticDisplayer))]
+public class Base : MonoBehaviour, IPooledObject<Base>, IKiller
 {
-    [Header("Base settings")]
-    [SerializeField, Min(0)] private int _initialUnitsCount = 3;
-    [Header("Expansion settings")]
+    [SerializeField] private int _maxUnitsCount = 5;
+    [SerializeField] private int _minUnitsCount = 1;
     [SerializeField, Min(0)] private int _newUnitCostResources = 3;
     [SerializeField, Min(0)] private int _newBaseCostResources = 5;
 
     private ResourcesScanner _resourceScanner;
-    private UnitsSpawner _unitCreator;
-
+    private UnitsSpawner _unitsSpawner;
     private UnitsRegistry _unitsRegistry;
+    private UnitSendingTimer _unitSendingTimer;
+    private BaseResourcesStatisticDisplayer _baseStatisticDisplayer;
+
     private ResourcesAccounter _resourcesAccounter;
 
     private ResourcesRegistry _resourcesRegistry;
 
-    public event Action ChangedResourcesCount;
+    public event Action<Base> Released;
+    public event Action<Unit, Flag> PickedUpUnitFlag;
 
-    private void Awake()
+    public Flag Flag { get; private set; }
+
+    private void OnDisable()
     {
-        _resourceScanner = GetComponent<ResourcesScanner>();
-        _unitCreator = GetComponent<UnitsSpawner>();
-
-        _unitsRegistry = new UnitsRegistry();
-        _resourcesAccounter = new ResourcesAccounter();
-
-        _resourcesRegistry = FindFirstObjectByType<ResourcesRegistry>(FindObjectsInactive.Include);
-
-        if (_resourcesRegistry == null)
-        {
-            Debug.LogError($"На сцене нет {nameof(_resourcesRegistry)}");
-        }
+        _resourceScanner.Detected -= OnDetectedResources;
+        _resourcesAccounter.ChangedCount -= OnResourcesCountChanged;
+        _unitSendingTimer.Ticked -= SendUnitBuildBase;
     }
 
     private void Start()
     {
-        List<Unit> initialUnits = _unitCreator.Spawn(this, _initialUnitsCount);
+        _baseStatisticDisplayer.Display(_resourcesAccounter.Count);
+    }
+
+    public void Initialize(Transform unitsContainer, ResourcesRegistry resourcesRegistry, int initialUnitsCount)
+    {
+        Initialize();
+
+        _unitsSpawner.Initialize(unitsContainer);
+        _resourcesRegistry = resourcesRegistry;
+        List<Unit> initialUnits = _unitsSpawner.Spawn(this, initialUnitsCount);
+
         _unitsRegistry.Add(initialUnits);
     }
 
-    private void OnEnable()
+    public void Initialize(Transform unitsContainer, ResourcesRegistry resourcesRegistry, Unit initialUnit)
     {
-        _resourceScanner.Detected += OnDetectedResource;
+        Initialize();
 
-        _resourcesAccounter.ChangedCount += OnChangedResourcesCount;
-        _resourcesAccounter.ChangedCount += OnCollectedEnoughtResourcesForCreateUnit;
+        _unitsSpawner.Initialize(unitsContainer);
+        _resourcesRegistry = resourcesRegistry;
+        _unitsRegistry.Add(initialUnit);
     }
 
-    private void OnDisable()
+    public void Initialize()
     {
-        _resourceScanner.Detected -= OnDetectedResource;
+        _resourceScanner = GetComponent<ResourcesScanner>();
+        _unitsSpawner = GetComponent<UnitsSpawner>();
+        _unitsRegistry = GetComponent<UnitsRegistry>();
+        _unitSendingTimer = GetComponent<UnitSendingTimer>();
+        _baseStatisticDisplayer = GetComponent<BaseResourcesStatisticDisplayer>();
 
-        _resourcesAccounter.ChangedCount -= OnChangedResourcesCount;
-        _resourcesAccounter.ChangedCount -= OnCollectedEnoughtResourcesForCreateUnit;
+        _resourcesAccounter = new ResourcesAccounter();
+
+        _resourceScanner.Detected += OnDetectedResources;
+        _resourcesAccounter.ChangedCount += OnResourcesCountChanged;
+        _unitSendingTimer.Ticked += SendUnitBuildBase;
+    }
+
+    public void Release()
+    {
+        Released?.Invoke(this);
     }
 
     public void TakeResource(Resource resource)
     {
-        _resourcesRegistry.RemoveReservation(resource);
+        _resourcesRegistry.Remove(resource);
         resource.Collect();
         _resourcesAccounter.Add(1);
     }
 
-    private void OnDetectedResource(List<Resource> resources)
+    public void SetFlag(Flag flag)
     {
-        List<Resource> avaliableResources = _resourcesRegistry.GetAvaliableResources(resources);
-        SendUnitsForResources(avaliableResources);
+        Flag = flag;
+        _unitSendingTimer.StartSending();
     }
 
-    private void OnChangedResourcesCount()
+    public bool HasFlag()
     {
-        ChangedResourcesCount?.Invoke();
-    }
-
-    private void OnCollectedEnoughtResourcesForCreateUnit()
-    {
-        if (_resourcesAccounter.HasEnoughResources(_newUnitCostResources))
-        {
-            Unit newUnit = _unitCreator.Spawn(this);
-            _unitsRegistry.Add(newUnit);
-
-            _resourcesAccounter.Remove(_newBaseCostResources);
-        }
+        return Flag != null;
     }
 
     private void SendUnitsForResources(List<Resource> resources)
@@ -96,13 +106,80 @@ public class Base : MonoBehaviour
             if (_unitsRegistry.TryGetRandomFreeUnit(out Unit unit))
             {
                 unit.GoToResource(resource);
-                _resourcesRegistry.Reserve(resource);
+                _resourcesRegistry.Add(resource);
             }
             else
             {
-                Debug.LogWarning("Нет свободных юнитов");
+                Debug.LogWarning($"{name}: Нет свободных юнитов, чтобы отправить их за ресурсами");
                 break;
             }
         }
+    }
+
+    private void OnDetectedResources(List<Resource> resources)
+    {
+        List<Resource> avaliableResources = _resourcesRegistry.GetNotRegistered(resources);
+        SendUnitsForResources(avaliableResources);
+    }
+
+    private void OnResourcesCountChanged()
+    {
+        SpawnUnit();
+        _baseStatisticDisplayer.Display(_resourcesAccounter.Count);
+    }
+
+    private void SpawnUnit()
+    {
+        if (_unitsRegistry.Count >= _maxUnitsCount)
+            return;
+
+        if (HasFlag() && _unitsRegistry.Count > _minUnitsCount)
+            return;
+
+        if (_resourcesAccounter.HasEnoughResources(_newUnitCostResources) == false)
+            return;
+
+        Unit newUnit = _unitsSpawner.Spawn(this);
+        _unitsRegistry.Add(newUnit);
+
+        _resourcesAccounter.Remove(_newUnitCostResources);
+    }
+
+    private void SendUnitBuildBase()
+    {
+        if (_unitsRegistry.Count <= _minUnitsCount)
+            return;
+
+        if (HasFlag() == false)
+            return;
+
+        if (_unitsRegistry.HasBusyGoingFlagUnit())
+            return;
+
+        if (_resourcesAccounter.HasEnoughResources(_newBaseCostResources) == false)
+            return;
+
+        if (_unitsRegistry.TryGetRandomFreeUnit(out Unit unit) == false)
+        {
+            Debug.LogWarning($"{name}: Нет свободных юнитов, чтобы отправить их строить базу");
+            return;
+        }
+
+        _resourcesAccounter.Remove(_newBaseCostResources);
+        unit.GoToFlag(Flag);
+
+        unit.PickedUpFlag += OnPickedUpUnitFlag;
+    }
+
+    private void OnPickedUpUnitFlag(Unit unit)
+    {
+        unit.PickedUpFlag -= OnPickedUpUnitFlag;
+
+        PickedUpUnitFlag?.Invoke(unit, Flag);
+
+        _unitsRegistry.Remove(unit);
+        Flag = null;
+
+        _unitSendingTimer.StopSending();
     }
 }

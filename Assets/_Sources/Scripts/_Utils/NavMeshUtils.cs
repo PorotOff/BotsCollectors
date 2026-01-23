@@ -3,15 +3,12 @@ using UnityEngine.AI;
 
 public static class NavMeshUtils
 {
-    public static bool TryGetPositionOnSurface(Vector3 sourcePosition, float maxDistance, out Vector3 positionOnNavMesh)
+    public static bool IsPositionOnNavMesh(Vector3 position, float checkRadius)
     {
-        if (NavMesh.SamplePosition(sourcePosition, out NavMeshHit hit, maxDistance, NavMesh.AllAreas))
+        if (NavMesh.SamplePosition(position, out NavMeshHit _, checkRadius, NavMesh.AllAreas))
         {
-            positionOnNavMesh = hit.position;
             return true;
         }
-        
-        positionOnNavMesh = default;
 
         return false;
     }

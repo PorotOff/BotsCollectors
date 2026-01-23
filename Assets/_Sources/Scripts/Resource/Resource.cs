@@ -1,19 +1,33 @@
 using System;
 using UnityEngine;
 
-public class Resource : MonoBehaviour, IPooledObject<Resource>
+[RequireComponent(typeof(KillerComponentTriggerDetector))]
+public class Resource : MonoBehaviour, IPooledObject<Resource>, ILostable
 {
-    public event Action<Resource> Released;
-    public event Action PickedUp;
-
     private Collider _collider;
+    private KillerComponentTriggerDetector _killerComponentTriggerDetector;
+
+    public event Action<Resource> Released;
+    public event Action Lost;
 
     private void Awake()
     {
+        _killerComponentTriggerDetector = GetComponent<KillerComponentTriggerDetector>();
+
         if (TryGetComponent(out _collider) == false)
         {
             Debug.Log($"Ошибка получения коллайдера на объекте {name}");
         }
+    }
+
+    private void OnEnable()
+    {
+        _killerComponentTriggerDetector.Detected += OnKillerDetected;
+    }
+
+    private void OnDisable()
+    {
+        _killerComponentTriggerDetector.Detected -= OnKillerDetected;
     }
 
     public void Release()
@@ -21,17 +35,20 @@ public class Resource : MonoBehaviour, IPooledObject<Resource>
         Released?.Invoke(this);
     }
 
-    public void Pickup(Transform parent)
+    public void PickUp(Transform parent)
+    {
+        transform.SetParent(parent);
+        transform.localPosition = Vector3.zero;
+
+        PickUp();
+    }
+
+    public void PickUp()
     {
         if (_collider != null)
         {
             _collider.enabled = false;
         }
-
-        transform.SetParent(parent);
-        transform.localPosition = Vector3.zero;
-
-        PickedUp?.Invoke();
     }
 
     public void Collect()
@@ -40,7 +57,13 @@ public class Resource : MonoBehaviour, IPooledObject<Resource>
         {
             _collider.enabled = true;
         }
+        
+        Release();
+    }
 
+    public void OnKillerDetected(IKiller killer)
+    {
+        Lost?.Invoke();
         Release();
     }
 }

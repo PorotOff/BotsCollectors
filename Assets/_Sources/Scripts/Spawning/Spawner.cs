@@ -6,8 +6,7 @@ public class Spawner<T> : MonoBehaviour where T : MonoBehaviour, IPooledObject<T
 {
     [Header("Spawner settings")]
     [SerializeField] private T _prefab;
-    [Tooltip("Можно оставить это поле пустым, тогда скрипт сам попытается найти на сцене нужный контейнер")]
-    [SerializeField] private PrefabInstancesContainer<T> _prefabsContainer;
+    [SerializeField] private Transform _prefabsContainer;
 
     private IObjectPool<T> _pool;
 
@@ -15,8 +14,13 @@ public class Spawner<T> : MonoBehaviour where T : MonoBehaviour, IPooledObject<T
 
     private void Awake()
     {
-        SetPrefabsContainerIfItNull();
         _pool = new ObjectPool<T>(OnPoolCreate, OnPoolGet, OnPoolRelease, OnPoolDestroy);
+    }
+
+    public void Initialize(Transform prefabsContainer)
+    {
+        _pool = new ObjectPool<T>(OnPoolCreate, OnPoolGet, OnPoolRelease, OnPoolDestroy);
+        _prefabsContainer = prefabsContainer;
     }
 
     public virtual void ReleaseAll()
@@ -39,24 +43,6 @@ public class Spawner<T> : MonoBehaviour where T : MonoBehaviour, IPooledObject<T
     {
         pooledObject.Released -= OnPooledObjectReleased;
         _pool.Release(pooledObject);
-    }
-
-    private void SetPrefabsContainerIfItNull()
-    {
-        if (_prefabsContainer == null)
-        {
-            Debug.LogWarning($"{nameof(_prefabsContainer)} null. Теперь скрипт попытается найти на сцене подходящий объект");
-            _prefabsContainer = FindFirstObjectByType<PrefabInstancesContainer<T>>();
-
-            if (_prefabsContainer == null)
-            {
-                Debug.LogError($"Не удалось найти на сцене {nameof(_prefabsContainer)}");
-            }
-            else
-            {
-                Debug.LogWarning($"<color=green>Успех</color>");
-            }
-        }
     }
 
     private T OnPoolCreate()
@@ -83,9 +69,4 @@ public class Spawner<T> : MonoBehaviour where T : MonoBehaviour, IPooledObject<T
     {
         Destroy(pooledObject.gameObject);
     }
-
-    // todo Исправить баг создания юнитов. Вроде, если ресурсов хватает и создаётся юнит, то не всегда убавляются ресурсы,
-    // потому что сразу после спавна юнита, при добавлении одного ресурса, спавнится ещё один юнит.
-
-    // todo Исправить логику спавна ресурсов. Теперь они должны спавнится в пределах NavMesh.
 }
